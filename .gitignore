@@ -1,0 +1,15 @@
+.venv/
+.uv-cache/
+.uv-python/
+__pycache__/
+*.py[cod]
+dataset/
+checkpoints_old_run/
+outputs/
+reports/
+static/reports/
+tmp/
+logs/
+runs/
+release/
+

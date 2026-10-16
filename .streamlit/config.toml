@@ -1,0 +1,15 @@
+[server]
+enableStaticServing = true
+headless = true
+port = 8501
+
+[client]
+showDeployButton = false
+toolbarMode = "minimal"
+
+[theme]
+base = "light"
+backgroundColor = "#F5F6F8"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#263541"
+primaryColor = "#275D89"

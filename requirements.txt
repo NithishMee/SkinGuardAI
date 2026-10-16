@@ -1,0 +1,12 @@
+# SkinGuardAI: Clinical Diagnostic Workstation & MedFusionNet
+torch>=2.2
+torchvision>=0.17
+streamlit>=1.40,<2
+matplotlib>=3.9,<4
+numpy>=1.26,<3
+pandas>=2.2,<3
+pillow>=10,<13
+scikit-learn>=1.4,<2
+tqdm>=4.66,<5
+optuna>=4.0,<6
+

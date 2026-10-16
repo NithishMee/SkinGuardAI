@@ -1,0 +1,241 @@
+/* Neutral clinical workspace. Typography and spacing carry the hierarchy. */
+:root { color-scheme: light; --sg-ink: #263541; --sg-muted: #65717b; --sg-line: #dce2e7; --sg-blue: #275d89; }
+html, body, .stApp { font-family: Arial, Helvetica, sans-serif; color: var(--sg-ink); background: #f5f6f8; }
+[data-testid="stAppViewContainer"] { background: #f5f6f8; }
+[data-testid="stSidebar"], [data-testid="collapsedControl"], [data-testid="stHeader"] { display: none; }
+[data-testid="stMainBlockContainer"] { max-width: 1180px; padding: 0 36px 60px; }
+.sg-workstation-header { display: flex; align-items: center; justify-content: space-between; min-height: 82px; gap: 24px; border-bottom: 1px solid var(--sg-line); }
+.sg-brand { display: flex; align-items: center; gap: 20px; }
+.sg-wordmark { font-size: 22px; letter-spacing: -.8px; font-weight: 700; color: #223443; }
+.sg-wordmark > span { font-weight: 400; color: #52728b; }
+.sg-product { border-left: 1px solid #ccd4db; padding-left: 20px; font-size: 13px; color: var(--sg-muted); }
+.sg-workflow { display: flex; gap: 24px; align-self: stretch; font-size: 12px; color: #7a858f; }
+.sg-workflow > span { display: flex; align-items: center; border-bottom: 2px solid transparent; padding-top: 2px; }
+.sg-workflow > .sg-active { border-bottom-color: var(--sg-blue); color: #244f72; font-weight: 600; }
+.sg-page-heading { padding: 35px 0 26px; }
+.sg-page-heading h1 { font-family: Arial, Helvetica, sans-serif; font-size: 28px; font-weight: 600; letter-spacing: -.7px; padding: 0; margin: 0 0 8px; line-height: 1.25; }
+.sg-page-heading p { color: var(--sg-muted); font-size: 14px; margin: 0; }
+[data-testid="stVerticalBlockBorderWrapper"] > div, [data-testid="stLayoutWrapper"] > [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .sg-panel-heading) { background: #fff; border-radius: 6px; }
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .sg-panel-heading) { padding: 24px; border: 1px solid var(--sg-line); background: white; border-radius: 6px; }
+.sg-panel-heading { margin-bottom: 12px; }
+.sg-panel-heading h2 { font-family: Arial, Helvetica, sans-serif; font-size: 17px; font-weight: 600; padding: 0; margin: 0 0 7px; letter-spacing: -.2px; }
+.sg-panel-heading p { color: var(--sg-muted); font-size: 12px; margin: 0; line-height: 1.5; }
+[data-testid="stWidgetLabel"] p { font-family: Arial, Helvetica, sans-serif; color: #43525f; font-size: 12px; font-weight: 500; }
+[data-baseweb="input"], [data-baseweb="select"] > div, [data-baseweb="textarea"] { background: #fff; border: 1px solid #cbd4dc; border-radius: 4px; }
+input, textarea { color: #263541 !important; font-size: 14px !important; }
+input::placeholder, textarea::placeholder { color: #7b8790 !important; }
+[data-testid="stTextInput"] input { min-height: 40px; border: none !important; background: transparent; }
+[data-testid="stTextInputRootElement"], [data-testid="stSelectbox"] [role="group"] { border: 1px solid #cbd4dc !important; border-radius: 4px; background: #fff; }
+[data-testid="stSelectbox"] [role="combobox"] { border: none !important; background: transparent; }
+[data-testid="stTextInputRootElement"]:focus-within, [data-testid="stSelectbox"] [role="group"]:focus-within { border-color: #275d89 !important; outline: 2px solid #dce9f3; }
+[data-testid="stTextArea"] textarea { border: 1px solid #cbd4dc; border-radius: 4px; background: white; }
+[data-testid="stFileUploaderDropzone"] { background: #fafbfc; border: 1px dashed #b5c3ce; border-radius: 4px; min-height: 210px; padding: 28px 20px; display: flex; flex-direction: column; justify-content: center; gap: 18px; }
+[data-testid="stFileUploaderDropzone"] small { color: var(--sg-muted); font-size: 12px; }
+[data-testid="stFileUploaderDropzone"] { align-items: center; text-align: center; }
+.st-key-intake_upload [data-testid="stFileUploaderDropzone"] { height: 210px; min-height: 210px; box-sizing: border-box; }
+[data-testid="stFileUploaderDropzone"] button { margin: 0 auto; }
+.stButton button, [data-testid="stFileUploader"] button { border-radius: 4px; min-height: 40px; font-weight: 500; font-size: 13px; box-shadow: none; }
+.stButton button[kind="primary"], [data-testid="stFileUploader"] button { background: #275d89; color: #fff; border: 1px solid #275d89; }
+.stButton button[kind="primary"]:hover, [data-testid="stFileUploader"] button:hover { background: #204d71; color: #fff; border-color: #204d71; }
+.stButton button[kind="secondary"] { background: #fff; color: #435563; border: 1px solid #cad3db; }
+button:focus-visible, a:focus-visible { outline: 2px solid #3573a3 !important; outline-offset: 3px; }
+.sg-card { padding: 20px 0 12px !important; margin: 20px 0 10px !important; border-top: 1px solid var(--sg-line); background: transparent; border-radius: 0; }
+.sg-card-title { font-size: 18px; font-weight: 600; letter-spacing: -.25px; color: #263541; margin-bottom: 7px; }
+.sg-card-caption { font-size: 12px; line-height: 1.6; color: var(--sg-muted); max-width: 90ch; }
+.sg-result-card { background: #fff !important; border: 1px solid var(--sg-line) !important; border-left: 3px solid #9a7b3c !important; padding: 24px 28px; border-radius: 4px; margin: 12px 0 24px; }
+.sg-result-benign { border-left-color: #42816a !important; }
+.sg-result-malignant { border-left-color: #b04758 !important; }
+.sg-result-title { font-size: 23px; font-weight: 600; color: #263541; letter-spacing: -.4px; line-height: 1.4; }
+.sg-result-card > div:last-child { font-size: 14px !important; line-height: 1.7 !important; }
+.sg-result-badge { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: .5px; margin-bottom: 12px; }
+.sg-badge-green { color: #246b53; }
+.sg-badge-red { color: #a32e43; }
+.sg-badge-amber { color: #806127; }
+[data-testid="stImage"] { background: #fff; border: 1px solid var(--sg-line); border-radius: 4px; padding: 8px; overflow: hidden; }
+[data-testid="stImage"] img { border-radius: 2px; }
+[data-testid="stImageCaption"] { color: #52616d; font-size: 12px; padding: 8px 0 3px; }
+.sg-prob-row { display: flex; align-items: center; gap: 24px; padding: 13px 0; border-bottom: 1px solid #e0e5ea; }
+.sg-prob-label { width: 310px; color: #344653; font-size: 13px; font-weight: 500; }
+.sg-prob-label > span:last-child { display: block; padding-left: 18px; margin-top: 3px; }
+.sg-prob-bar-container { flex: 1; height: 6px; background: #e0e6ec; position: relative; border-radius: 2px; overflow: hidden; }
+.sg-prob-bar-fill { height: 100%; border-radius: 2px; }
+.sg-prob-value { width: 62px; text-align: right; color: #344653 !important; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sg-btn-download { display: flex; justify-content: center; align-items: center; box-sizing: border-box; min-height: 42px; padding: 10px 16px; background: #275d89; border: 1px solid #275d89; border-radius: 4px; color: #fff !important; font-size: 13px; font-weight: 500; text-decoration: none !important; }
+.sg-btn-download:hover { background: #204d71; }
+.sg-btn-secondary { background: #fff; border-color: #cad3db; color: #435563 !important; }
+.sg-btn-secondary:hover { background: #edf1f5; }
+
+/* Small surface and interaction refinements; no continuous motion. */
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .sg-panel-heading),
+.sg-result-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(32, 53, 71, .025), 0 10px 28px rgba(32, 53, 71, .035);
+}
+.sg-panel-heading { padding-bottom: 14px; border-bottom: 1px solid #edf0f3; }
+[data-testid="stTextInputRootElement"],
+[data-testid="stSelectbox"] [role="group"],
+[data-testid="stTextArea"] textarea {
+  border-radius: 5px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+[data-testid="stTextInputRootElement"]:focus-within,
+[data-testid="stSelectbox"] [role="group"]:focus-within,
+[data-testid="stTextArea"] textarea:focus {
+  outline: none;
+  border-color: #275d89 !important;
+  box-shadow: 0 0 0 3px rgba(39, 93, 137, .11);
+}
+[data-testid="stFileUploaderDropzone"] {
+  border-radius: 6px;
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+[data-testid="stFileUploaderDropzone"]:focus-within {
+  background: #f3f7fb;
+  border-color: #668bab;
+}
+.stButton button, [data-testid="stFileUploader"] button, .sg-btn-download {
+  border-radius: 5px;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.stButton button:active:not(:disabled),
+[data-testid="stFileUploader"] button:active:not(:disabled),
+.sg-btn-download:active { transform: translateY(1px); box-shadow: none; }
+.sg-prob-row, [data-testid="stImage"] { transition: background-color 180ms ease, border-color 180ms ease; }
+
+@media (hover: hover) and (pointer: fine) {
+  [data-testid="stTextInputRootElement"]:hover,
+  [data-testid="stSelectbox"] [role="group"]:hover { border-color: #95a9ba !important; }
+  [data-testid="stFileUploaderDropzone"]:hover { background: #f3f7fb; border-color: #668bab; }
+  .stButton button:hover:not(:disabled),
+  [data-testid="stFileUploader"] button:hover:not(:disabled),
+  .sg-btn-download:hover { box-shadow: 0 3px 8px rgba(32, 68, 97, .12); }
+  .stButton button[kind="secondary"]:hover:not(:disabled) { background: #f4f7fa; border-color: #95a9ba; }
+  .sg-prob-row:hover { background: #edf2f6; }
+  [data-testid="stImage"]:hover { border-color: #aabcc9; }
+}
+
+@keyframes sg-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sg-page-heading { animation: sg-enter 260ms ease-out both; }
+  [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .sg-panel-heading),
+  .sg-result-card { animation: sg-enter 320ms ease-out both; }
+  [data-testid="stColumn"]:nth-child(2) [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .sg-panel-heading) { animation-delay: 60ms; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sg-page-heading, .sg-result-card, .sg-prob-row, .sg-btn-download,
+  [data-testid="stVerticalBlock"], [data-testid="stImage"],
+  [data-testid="stTextInputRootElement"], [data-testid="stSelectbox"] [role="group"],
+  [data-testid="stTextArea"] textarea, [data-testid="stFileUploaderDropzone"],
+  .stButton button, [data-testid="stFileUploader"] button {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+@media (max-width: 700px) {
+  [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .sg-panel-heading) { flex-direction: column; gap: 20px; }
+  [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .sg-panel-heading) > [data-testid="stColumn"] { width: 100%; flex: 1 1 100%; }
+  [data-testid="stMainBlockContainer"] { padding: 0 18px 40px; }
+  .sg-workstation-header { flex-wrap: wrap; gap: 0; padding-top: 18px; }
+  .sg-brand { width: 100%; }
+  .sg-workflow { min-height: 48px; }
+  .sg-page-heading { padding: 26px 0 20px; }
+  .sg-page-heading h1 { font-size: 25px; }
+  [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .sg-panel-heading) { padding: 18px; }
+  .sg-result-card { padding: 20px; }
+  .sg-prob-row { flex-wrap: wrap; gap: 10px; }
+  .sg-prob-label { width: 100%; }
+}
+
+/* Rounded surfaces shared by intake and assessment pages. */
+.st-key-intake_patient_card, .st-key-intake_scan_card {
+  min-height: 400px;
+  border-radius: 20px !important;
+  border-color: #dce5ed !important;
+  box-shadow: 0 5px 20px rgba(37, 65, 88, .045), 0 1px 3px rgba(37, 65, 88, .025);
+}
+.sg-result-card { border-radius: 20px; box-shadow: 0 6px 24px rgba(37, 65, 88, .045); }
+.sg-workflow > .sg-active { background: #edf3f8; border-bottom: 0; border-radius: 999px; }
+.sg-workflow { align-items: center; gap: 10px; }
+.sg-workflow > span { padding: 10px 16px; }
+.sg-wordmark > span { color: #3479a8; }
+[data-testid="stTextInputRootElement"], [data-testid="stSelectbox"] [role="group"],
+[data-testid="stTextArea"] textarea, [data-baseweb="input"], [data-baseweb="select"] > div,
+[data-baseweb="textarea"] { border-radius: 11px; }
+[data-testid="stFileUploaderDropzone"] { border-radius: 14px; background-color: #f7fafd; }
+.stButton button, [data-testid="stFileUploader"] button, .sg-btn-download { border-radius: 11px; }
+.stButton button:disabled { background: #e8eef4 !important; border-color: #dce5ed !important; color: #7b8d9d !important; box-shadow: none; }
+[data-testid="stImage"] { border-radius: 16px; padding: 10px; }
+[data-testid="stImage"] img { border-radius: 10px; }
+.sg-prob-row { border-radius: 10px; padding-left: 10px; padding-right: 10px; }
+.sg-prob-bar-container, .sg-prob-bar-fill { border-radius: 999px; }
+.sg-card-title { color: #23435c; }
+@media (hover: hover) and (pointer: fine) {
+  .st-key-intake_patient_card:hover, .st-key-intake_scan_card:hover {
+    box-shadow: 0 10px 30px rgba(37, 65, 88, .075);
+    border-color: #c6d7e4 !important;
+  }
+}
+@keyframes sg-soft-reveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sg-loading-spin { to { transform: rotate(360deg); } }
+.sg-startup {
+  position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center;
+  background: #f5f6f8; color: #263541;
+}
+.sg-startup-content { text-align: center; padding: 36px; }
+.sg-startup-content .sg-wordmark { font-size: 30px; }
+.sg-startup-content p { margin: 16px 0 5px; font-size: 15px; }
+.sg-startup-content small { color: #65717b; font-size: 12px; }
+.sg-loading-ring {
+  width: 48px; height: 48px; margin: 0 auto 24px; border-radius: 50%;
+  border: 3px solid #dce7ef; border-top-color: #3479a8;
+  animation: sg-loading-spin 900ms linear infinite;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sg-workstation-header { animation: sg-soft-reveal 350ms ease-out both; }
+  .sg-page-heading { animation: sg-soft-reveal 420ms ease-out both; }
+  .st-key-intake_patient_card { animation: sg-soft-reveal 420ms ease-out both !important; }
+  .st-key-intake_scan_card { animation: sg-soft-reveal 480ms 70ms ease-out both !important; }
+  .st-key-intake_patient_card, .st-key-intake_scan_card { transition: box-shadow 220ms ease, border-color 220ms ease; }
+  .sg-result-card, [data-testid="stImage"], .sg-card { animation: sg-soft-reveal 450ms ease-out both; }
+  .sg-prob-row { animation: sg-soft-reveal 380ms ease-out both; }
+  .sg-startup-content { animation: sg-soft-reveal 400ms ease-out both; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sg-workstation-header, .sg-card, .sg-startup-content, .sg-loading-ring { animation: none !important; }
+}
+
+/* Visible page arrival, including a low-motion fade alternative. */
+@keyframes sg-fade-in { from { opacity: .25; } to { opacity: 1; } }
+@keyframes sg-loading-fade { 0%,100% { opacity: .4; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: no-preference) {
+  .sg-workstation-header { animation: sg-soft-reveal 700ms ease-out both; }
+  .sg-page-heading { animation: sg-soft-reveal 850ms 80ms ease-out both; }
+  .st-key-intake_patient_card { animation: sg-soft-reveal 900ms 150ms ease-out both !important; }
+  .st-key-intake_scan_card { animation: sg-soft-reveal 900ms 280ms ease-out both !important; }
+  .sg-result-card, .sg-card, [data-testid="stImage"] { animation: sg-soft-reveal 850ms 120ms ease-out both; }
+  .sg-prob-row { animation: sg-fade-in 1000ms ease-out both; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sg-workstation-header, .sg-page-heading, .sg-result-card, .sg-card,
+  .st-key-intake_patient_card, .st-key-intake_scan_card, [data-testid="stImage"] {
+    animation: sg-fade-in 1100ms ease-out both !important;
+    transform: none !important;
+  }
+  .sg-loading-ring { animation: sg-loading-fade 1800ms ease-in-out infinite !important; }
+}
+
+/* Shared, aligned status treatment for unsupported and inconclusive cases. */
+.sg-notice { padding: 22px 26px; margin: 16px 0; border: 1px solid #e4d8bd; border-left: 4px solid #b28a3f; border-radius: 18px; background: #fffdf8; }
+.sg-notice-label { color: #826732; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 7px; }
+.sg-notice-title { color: #574625; font-size: 21px; font-weight: 600; line-height: 1.3; }
+.sg-notice p { color: #665b47; font-size: 14px; line-height: 1.65; margin: 10px 0 0; max-width: 100ch; }
+.sg-notice .sg-notice-action { color: #354b5d; }
+.st-key-intake_validation [data-testid="stCheckbox"] { padding: 0 6px 12px; }
+@media (max-width:700px) { .sg-notice { padding: 20px; } }
