@@ -185,8 +185,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid #3573a3 !important; o
 }
 @keyframes sg-loading-spin { to { transform: rotate(360deg); } }
 .sg-startup {
-  position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center;
-  background: #f5f6f8; color: #263541;
+  position: fixed; inset: 0; z-index: 500; display: grid; place-items: center;
+  background: #f5f6f8; color: #263541; pointer-events: none;
 }
 .sg-startup-content { text-align: center; padding: 36px; }
 .sg-startup-content .sg-wordmark { font-size: 30px; }

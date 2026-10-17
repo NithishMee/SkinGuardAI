@@ -1,9 +1,10 @@
 # SkinGuardAI: Clinical Diagnostic Workstation
---extra-index-url https://download.pytorch.org/whl/cpu
-torch>=2.2.0
-torchvision>=0.17.0
 streamlit>=1.40,<2
 matplotlib>=3.9,<4
 numpy>=1.26,<3
 pandas>=2.2,<3
 pillow>=10,<13
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.2.0
+torchvision>=0.17.0

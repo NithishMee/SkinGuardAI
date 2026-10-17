@@ -64,7 +64,7 @@ except Exception:
 # ==============================================================================
 # 2. Clinical Classification Metadata & Fixed System Configuration
 # ==============================================================================
-CHECKPOINT_PATH = Path("checkpoints/medfusionnet_best.pt")
+CHECKPOINT_PATH = Path(__file__).parent / "checkpoints" / "medfusionnet_best.pt"
 FIXED_THRESHOLD = 0.90
 threshold = 0.90
 threshold_percent = 90
