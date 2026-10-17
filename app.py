@@ -57,6 +57,11 @@ try:
     
     from ham10000_data import build_transforms
     from medfusionnet import MedFusionNet
+
+    # Limit CPU thread count to avoid thread contention on throttled cloud cores
+    if not torch.cuda.is_available():
+        torch.set_num_threads(2)
+        torch.set_num_interop_threads(1)
 except Exception:
     startup_view.empty()
     raise
@@ -315,6 +320,13 @@ def predict_with_multiscale_gradcam(
         model.convnext_features[5]._forward_hooks.clear()
         model.convnext_features[7]._forward_hooks.clear()
         del acts_5, acts_7, grads_5, grads_7
+        if "cam_input" in locals():
+            del cam_input
+        if "cam_logits" in locals():
+            del cam_logits
+        if "act5" in locals():
+            del act5, grad5, act7, grad7, cam5, cam7, fused_cam
+        import gc
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -994,83 +1006,76 @@ else:
             key="results_clinical_notes",
         )
 
-        # Generate PDF & Text report payloads
-        pdf_bytes = generate_clinical_pdf_report(
-            patient_id=patient_id,
-            patient_name=patient_name,
-            patient_age=patient_age,
-            anatomic_site=anatomic_site,
-            clinical_notes=clinical_notes_input,
-            image_name=image_source_label,
-            active_image=resized_display,
-            cam=cam,
-            overlay_display=overlay_display,
-            predicted_code=predicted_code,
-            confidence=confidence,
-            is_confident=is_confident,
-            meta=meta,
-            probabilities=probabilities,
-            classes=classes,
-            fusion_weights=fusion_weights,
-            threshold_percent=threshold_percent,
-        )
-
-        txt_report = generate_clinical_text_report(
-            patient_id=patient_id,
-            patient_name=patient_name,
-            patient_age=patient_age,
-            anatomic_site=anatomic_site,
-            clinical_notes=clinical_notes_input,
-            image_name=image_source_label,
-            predicted_code=predicted_code,
-            confidence=confidence,
-            is_confident=is_confident,
-            meta=meta,
-            probabilities=probabilities,
-            classes=classes,
-            fusion_weights=fusion_weights,
-            threshold_percent=threshold_percent,
-        )
-
         clean_pid = re.sub(r"[^\w\-]", "_", patient_id.strip()) or "PT-UNASSIGNED"
         report_timestamp = datetime.now().strftime("%Y%m%d_%H%M")
         filename_pdf = f"SkinGuardAI_Report_{clean_pid}_{report_timestamp}.pdf"
         filename_txt = f"SkinGuardAI_Report_{clean_pid}_{report_timestamp}.txt"
 
-        # Archive locally to reports/ directory on disk
-        reports_dir = Path("reports")
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        pdf_path = reports_dir / filename_pdf
-        pdf_path.write_bytes(pdf_bytes)
-        txt_path = reports_dir / filename_txt
-        txt_path.write_text(txt_report, encoding="utf-8")
-
-        # Also save directly to static/reports/ for rock-solid HTTP downloads with exact filename
-        static_reports_dir = Path("static/reports")
-        static_reports_dir.mkdir(parents=True, exist_ok=True)
-        static_pdf_path = static_reports_dir / filename_pdf
-        static_pdf_path.write_bytes(pdf_bytes)
-        static_txt_path = static_reports_dir / filename_txt
-        static_txt_path.write_text(txt_report, encoding="utf-8")
+        # Cache report payloads in session_state to eliminate CPU stalls on UI interactions
+        cache_key = f"{patient_id}_{image_source_label}_{clinical_notes_input}_{cmap_name}"
+        if st.session_state.get("_last_report_key") != cache_key or "_cached_pdf" not in st.session_state:
+            pdf_bytes = generate_clinical_pdf_report(
+                patient_id=patient_id,
+                patient_name=patient_name,
+                patient_age=patient_age,
+                anatomic_site=anatomic_site,
+                clinical_notes=clinical_notes_input,
+                image_name=image_source_label,
+                active_image=resized_display,
+                cam=cam,
+                overlay_display=overlay_display,
+                predicted_code=predicted_code,
+                confidence=confidence,
+                is_confident=is_confident,
+                meta=meta,
+                probabilities=probabilities,
+                classes=classes,
+                fusion_weights=fusion_weights,
+                threshold_percent=threshold_percent,
+            )
+            txt_report = generate_clinical_text_report(
+                patient_id=patient_id,
+                patient_name=patient_name,
+                patient_age=patient_age,
+                anatomic_site=anatomic_site,
+                clinical_notes=clinical_notes_input,
+                image_name=image_source_label,
+                predicted_code=predicted_code,
+                confidence=confidence,
+                is_confident=is_confident,
+                meta=meta,
+                probabilities=probabilities,
+                classes=classes,
+                fusion_weights=fusion_weights,
+                threshold_percent=threshold_percent,
+            )
+            st.session_state._cached_pdf = pdf_bytes
+            st.session_state._cached_txt = txt_report
+            st.session_state._last_report_key = cache_key
+        else:
+            pdf_bytes = st.session_state._cached_pdf
+            txt_report = st.session_state._cached_txt
 
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
-            st.markdown(
-                f"""
-                <a href="/app/static/reports/{filename_pdf}" download="{filename_pdf}" class="sg-btn-download" target="_blank">
-                    Download PDF report
-                </a>
-                """,
-                unsafe_allow_html=True,
+            st.download_button(
+                label="Download PDF report",
+                data=pdf_bytes,
+                file_name=filename_pdf,
+                mime="application/pdf",
+                type="primary",
+                use_container_width=True,
+                key="btn_dl_pdf",
             )
         with col_btn2:
-            st.markdown(
-                f"""
-                <a href="/app/static/reports/{filename_txt}" download="{filename_txt}" class="sg-btn-download sg-btn-secondary" target="_blank">
-                    Download text summary
-                </a>
-                """,
-                unsafe_allow_html=True,
+            st.download_button(
+                label="Download text summary",
+                data=txt_report,
+                file_name=filename_txt,
+                mime="text/plain",
+                type="secondary",
+                use_container_width=True,
+                key="btn_dl_txt",
             )
 
     # Bottom navigation to return to intake
