@@ -618,6 +618,14 @@ if not CHECKPOINT_PATH.is_file():
     )
     st.stop()
 
+if CHECKPOINT_PATH.stat().st_size < 1_000_000:
+    startup_view.empty()
+    st.error(
+        "Model checkpoint appears to be an unresolved Git LFS pointer (~130 bytes) instead of real binary weights. "
+        "Please pull or commit the 86.7 MB model checkpoint directly without Git LFS."
+    )
+    st.stop()
+
 try:
     model, checkpoint, device = load_medfusionnet_model(str(CHECKPOINT_PATH))
 except Exception as error:

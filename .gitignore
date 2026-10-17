@@ -12,4 +12,6 @@ tmp/
 logs/
 runs/
 release/
+checkpoints/*_train_full.pt
+checkpoints/*_backup.pt
 

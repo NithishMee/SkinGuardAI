@@ -1,0 +1,5 @@
+# SkinGuardAI: Model Training, Tuning, and Benchmarking Requirements
+-r requirements.txt
+scikit-learn>=1.4,<2
+tqdm>=4.66,<5
+optuna>=4.0,<6

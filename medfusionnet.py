@@ -218,9 +218,36 @@ class MedFusionNet(nn.Module):
             pretrained=False,
         ).to(device)
 
-        model.load_state_dict(state_dict)
+        # Ensure float32 weights on CPU to guarantee convolution and attention kernel compatibility
+        clean_state_dict = {}
+        for k, v in state_dict.items():
+            if hasattr(v, "is_floating_point") and v.is_floating_point() and v.dtype != torch.float32:
+                clean_state_dict[k] = v.float()
+            else:
+                clean_state_dict[k] = v
+
+        model.load_state_dict(clean_state_dict)
         model.eval()
-        return model, checkpoint
+
+        # Free temporary deserialization structures immediately to keep RAM < 150MB
+        del state_dict
+        del clean_state_dict
+        import gc
+        gc.collect()
+
+        metadata = {
+            "classes": checkpoint.get("classes", ["akiec", "bcc", "bkl", "df", "mel", "nv", "vasc"]),
+            "image_size": image_size,
+            "vit_depth": vit_depth,
+            "vit_type": vit_type,
+            "fusion_type": fusion_type,
+            "best_val_macro_f1": checkpoint.get("best_val_macro_f1", None),
+            "epoch": checkpoint.get("epoch", None),
+        }
+        del checkpoint
+        gc.collect()
+
+        return model, metadata
 
     def get_parameter_groups(
         self, backbone_lr: float, head_lr: float, weight_decay: float

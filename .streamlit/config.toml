@@ -1,10 +1,10 @@
 [server]
 enableStaticServing = true
 headless = true
-port = 8501
+address = "0.0.0.0"
+enableXsrfProtection = true
 
 [client]
-showDeployButton = false
 toolbarMode = "minimal"
 
 [theme]
