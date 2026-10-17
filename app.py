@@ -58,10 +58,12 @@ try:
     from ham10000_data import build_transforms
     from medfusionnet import MedFusionNet
 
-    # Limit CPU thread count to avoid thread contention on throttled cloud cores
-    if not torch.cuda.is_available():
-        torch.set_num_threads(2)
-        torch.set_num_interop_threads(1)
+    # Safely tune thread count if supported
+    try:
+        if not torch.cuda.is_available():
+            torch.set_num_threads(2)
+    except Exception:
+        pass
 except Exception:
     startup_view.empty()
     raise
