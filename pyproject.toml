@@ -8,10 +8,19 @@ dependencies = [
     "numpy>=1.26,<3",
     "pandas>=2.2,<3",
     "pillow>=10,<13",
-    "scikit-learn>=1.4,<2",
-    "streamlit>=1.40,<2",
+    "streamlit>=1.49,<2",
     "torch>=2.2",
     "torchvision>=0.17",
-    "tqdm>=4.66,<5",
-    "optuna>=4.0,<6",
 ]
+
+[project.optional-dependencies]
+train = ["scikit-learn>=1.4,<2", "tqdm>=4.66,<5", "optuna>=4.0,<6"]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }

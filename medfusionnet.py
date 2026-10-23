@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Literal
+from pathlib import Path
 
 import torch
 from torch import nn
@@ -195,7 +196,9 @@ class MedFusionNet(nn.Module):
     def load_from_checkpoint(
         cls, checkpoint_path: str | Path, device: torch.device | str = "cpu"
     ) -> tuple[MedFusionNet, dict]:
-        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        # Map the checkpoint on CPU; load_state_dict copies/casts into the model.
+        # Avoid a second full float32 state dictionary during startup.
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True, mmap=True)
         state_dict = checkpoint["model_state_dict"]
         num_classes = len(checkpoint.get("classes", ["akiec", "bcc", "bkl", "df", "mel", "nv", "vasc"]))
         image_size = checkpoint.get("image_size", 224)
@@ -218,20 +221,11 @@ class MedFusionNet(nn.Module):
             pretrained=False,
         ).to(device)
 
-        # Ensure float32 weights on CPU to guarantee convolution and attention kernel compatibility
-        clean_state_dict = {}
-        for k, v in state_dict.items():
-            if hasattr(v, "is_floating_point") and v.is_floating_point() and v.dtype != torch.float32:
-                clean_state_dict[k] = v.float()
-            else:
-                clean_state_dict[k] = v
-
-        model.load_state_dict(clean_state_dict)
+        model.load_state_dict(state_dict)
         model.eval()
 
-        # Free temporary deserialization structures immediately to keep RAM < 150MB
+        # Release checkpoint tensors; actual RSS also includes runtime/activations.
         del state_dict
-        del clean_state_dict
         import gc
         gc.collect()
 

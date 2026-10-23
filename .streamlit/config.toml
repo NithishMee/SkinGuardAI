@@ -7,3 +7,10 @@ backgroundColor = "#F5F6F8"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#263541"
 primaryColor = "#275D89"
+
+[server]
+maxUploadSize = 10
+fileWatcherType = "none"
+
+[browser]
+gatherUsageStats = false

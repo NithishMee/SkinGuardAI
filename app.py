@@ -44,36 +44,17 @@ if not st.session_state.get("workspace_ready", False):
         unsafe_allow_html=True,
     )
 
-try:
-    import matplotlib.pyplot as plt
-    import numpy as np
-    import pandas as pd
-    import torch
-    import torch.nn.functional as functional
-    from matplotlib.backends.backend_pdf import PdfPages
-    from PIL import Image
-    from torchvision import transforms
-    from torchvision.transforms import InterpolationMode
-    
-    from ham10000_data import build_transforms
-    from medfusionnet import MedFusionNet
-
-    # Safely tune thread count if supported
-    try:
-        if not torch.cuda.is_available():
-            torch.set_num_threads(2)
-    except Exception:
-        pass
-except Exception:
-    startup_view.empty()
-    raise
+import numpy as np
+from PIL import Image, ImageOps
+from hashlib import sha256
+from html import escape
 
 # ==============================================================================
 # 2. Clinical Classification Metadata & Fixed System Configuration
 # ==============================================================================
 CHECKPOINT_PATH = Path(__file__).parent / "checkpoints" / "medfusionnet_best.pt"
 FIXED_THRESHOLD = 0.90
-threshold = 0.90
+threshold = FIXED_THRESHOLD
 threshold_percent = 90
 use_tta = False
 
@@ -165,23 +146,15 @@ ANATOMIC_SITES = [
 # ==============================================================================
 # 3. Model Loading & Inference Engine
 # ==============================================================================
-@st.cache_resource
-def load_medfusionnet_model(checkpoint_path: str) -> tuple[MedFusionNet, dict, torch.device]:
-    device = torch.device("cuda" if torch.cuda.device_count() > 0 else "cpu")
-    model, checkpoint = MedFusionNet.load_from_checkpoint(checkpoint_path, device=device)
-    model.eval()
-    for p in model.parameters():
-        p.requires_grad = False
-    return model, checkpoint, device
-
-
 def validate_dermoscopy_domain(image: Image.Image) -> tuple[bool, str, dict]:
     """Verify that an uploaded image conforms to dermatoscopic/cutaneous domain characteristics.
-    
+
     Detects Out-of-Distribution (OOD) non-skin subjects such as plants, flowers, foliage,
     household objects, synthetic text, or outdoor scenery.
     """
-    arr = np.asarray(image.convert("RGB"), dtype=np.float32) / 255.0
+    sample = image.convert("RGB")
+    sample.thumbnail((256, 256))
+    arr = np.asarray(sample, dtype=np.float32) / 255.0
     r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
 
     # 1. Vegetation / plant foliage detection (dominant green: G > R and G > B)
@@ -227,116 +200,6 @@ def validate_dermoscopy_domain(image: Image.Image) -> tuple[bool, str, dict]:
     return True, "Valid dermatoscopic scan.", stats
 
 
-def predict_with_multiscale_gradcam(
-    model: MedFusionNet,
-    image: Image.Image,
-    image_size: int,
-    device: torch.device,
-    use_tta: bool = False,
-    confidence_threshold: float = 0.90,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
-    """Execute memory-safe inference and high-precision Multi-Scale Layer-CAM."""
-    import gc
-
-    # Direct bilinear resize ensures 1-to-1 coordinate alignment with display view (no cropping distortion)
-    direct_eval_transform = transforms.Compose(
-        [
-            transforms.Resize((image_size, image_size), interpolation=InterpolationMode.BILINEAR),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
-    image_tensor = direct_eval_transform(image).unsqueeze(0).to(device)
-
-    # 1. Run inference with adaptive learned attention
-    with torch.inference_mode():
-        p1 = functional.softmax(model(image_tensor), dim=1)
-        if use_tta:
-            p2 = functional.softmax(model(torch.flip(image_tensor, dims=[-1])), dim=1)
-            p3 = functional.softmax(model(torch.flip(image_tensor, dims=[-2])), dim=1)
-            p4 = functional.softmax(model(torch.flip(image_tensor, dims=[-2, -1])), dim=1)
-            probabilities = (p1 + p2 + p3 + p4) / 4.0
-        else:
-            probabilities = p1
-        predicted_index = int(probabilities.argmax(dim=1).item())
-
-    fusion_weights = model.last_fusion_weights[0].detach().cpu().numpy()
-    confidence = float(probabilities[0, predicted_index].item())
-
-    # Clean any lingering forward hooks from previous executions
-    model.convnext_features[5]._forward_hooks.clear()
-    model.convnext_features[7]._forward_hooks.clear()
-
-    # 2. Multi-Scale Layer-CAM (Element-Wise Gradient Weighting)
-    # Hooks Stage 5 (14x14 micro-textures & pigment networks) and Stage 7 (7x7 global context)
-    acts_5, grads_5 = [], []
-    acts_7, grads_7 = [], []
-
-    def hook_5(_module, _inputs, output):
-        acts_5.append(output)
-        if output.requires_grad:
-            output.register_hook(lambda gradient: grads_5.append(gradient))
-
-    def hook_7(_module, _inputs, output):
-        acts_7.append(output)
-        if output.requires_grad:
-            output.register_hook(lambda gradient: grads_7.append(gradient))
-
-    h5 = model.convnext_features[5].register_forward_hook(hook_5)
-    h7 = model.convnext_features[7].register_forward_hook(hook_7)
-
-    try:
-        with torch.enable_grad():
-            cam_input = image_tensor.clone().detach().requires_grad_(True)
-            cam_logits = model(cam_input)
-            cam_logits[0, predicted_index].backward()
-
-        act5, grad5 = acts_5[0], grads_5[0]
-        act7, grad7 = acts_7[0], grads_7[0]
-
-        # Stage 5 Layer-CAM (Fine Pigment Reticulations, Borders, and Micro-margins)
-        cam5 = functional.relu(act5 * functional.relu(grad5)).sum(dim=1, keepdim=True)
-        cam5 = functional.interpolate(cam5, size=(image_size, image_size), mode="bilinear", align_corners=False)
-        cam5_norm = (cam5 - cam5.min()) / (cam5.max() - cam5.min() + 1e-8)
-
-        # Stage 7 Layer-CAM (Global Lesion Geometry and Semantic Core)
-        cam7 = functional.relu(act7 * functional.relu(grad7)).sum(dim=1, keepdim=True)
-        cam7 = functional.interpolate(cam7, size=(image_size, image_size), mode="bilinear", align_corners=False)
-        cam7_norm = (cam7 - cam7.min()) / (cam7.max() - cam7.min() + 1e-8)
-
-        # Multi-scale harmonic blending: 60% Stage 5 (borders & lesion structure) + 40% Stage 7 (semantic context)
-        fused_cam = 0.60 * cam5_norm + 0.40 * cam7_norm
-        fused_cam = (fused_cam - fused_cam.min()) / (fused_cam.max() - fused_cam.min() + 1e-8)
-        cam_np = fused_cam[0, 0].detach().cpu().numpy()
-
-        # Adaptive background skin noise suppression
-        cutoff = np.percentile(cam_np, 20) * 0.5
-        cam_np = np.where(cam_np < cutoff, 0.0, (cam_np - cutoff) / (1.0 - cutoff + 1e-8))
-        cam_np = np.clip(cam_np, 0.0, 1.0)
-        # Smooth boundary falloff for natural clinical appearance
-        cam_np = np.power(cam_np, 1.1)
-
-    finally:
-        h5.remove()
-        h7.remove()
-        model.convnext_features[5]._forward_hooks.clear()
-        model.convnext_features[7]._forward_hooks.clear()
-        del acts_5, acts_7, grads_5, grads_7
-        if "cam_input" in locals():
-            del cam_input
-        if "cam_logits" in locals():
-            del cam_logits
-        if "act5" in locals():
-            del act5, grad5, act7, grad7, cam5, cam7, fused_cam
-        import gc
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-    fusion_weights = model.last_fusion_weights[0].detach().cpu().numpy()
-    return probabilities[0].cpu().numpy(), cam_np, fusion_weights, predicted_index
-
-
 # ==============================================================================
 # 4. Clinical Report Generation Helpers (PDF & EMR Format)
 # ==============================================================================
@@ -360,6 +223,8 @@ def generate_clinical_pdf_report(
     threshold_percent: int = 90,
 ) -> bytes:
     """Render a single A4 summary; full notes remain available in the text export."""
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
     import textwrap
     from matplotlib.patches import FancyBboxPatch
     from matplotlib.font_manager import FontProperties
@@ -424,7 +289,7 @@ def generate_clinical_pdf_report(
 
     accent = ("#A33C51" if meta.get("is_cancer",False) else "#28765D") if is_confident else "#936A28"
     fig.patches.append(FancyBboxPatch((.065,.637),.87,.184,boxstyle="round,pad=0.008,rounding_size=0.012",transform=fig.transFigure,facecolor="#F4F7FA",edgecolor="#DDE5EC",zorder=-1))
-    status = ("MALIGNANT NEOPLASM CONFIRMED" if meta.get("is_cancer",False) else "BENIGN LESION CONFIRMED") if is_confident else "UNKNOWN CATEGORY / INCONCLUSIVE"
+    status = ("PREDICTED MALIGNANT CLASS" if meta.get("is_cancer",False) else "PREDICTED BENIGN CLASS") if is_confident else "UNKNOWN CATEGORY / INCONCLUSIVE"
     text(.083,.805,status,size=8,color=accent,bold=True)
     diagnosis = meta.get("name",predicted_code) if is_confident else "Clinical review required"
     wrapped(.083,.782,diagnosis,.83,2,size=12,bold=True)
@@ -440,8 +305,8 @@ def generate_clinical_pdf_report(
     heading(.065,.611,"Image attribution")
     for x, data, label, cmap in [
         (.065,active_image.convert("RGB"),"01  Dermoscopy scan",None),
-        (.365,np.nan_to_num(np.clip(cam,0,1)),"02  Layer-CAM saliency","turbo"),
-        (.665,np.nan_to_num(np.clip(overlay_display,0,1)),"03  Pathological overlay",None),
+        (.365,np.zeros((8,8)) if cam is None else np.nan_to_num(np.clip(cam,0,1)),"02  Not generated" if cam is None else "02  Layer-CAM saliency","turbo"),
+        (.665,np.nan_to_num(np.clip(overlay_display,0,1)),"03  Attribution not generated" if cam is None else "03  Attribution overlay",None),
     ]:
         ax=fig.add_axes([x,.414,.27,.177])
         ax.imshow(data,cmap=cmap)
@@ -520,7 +385,7 @@ def generate_clinical_text_report(
     if is_confident:
         category_str = meta.get("category", "Confirmed").upper()
         lines.extend([
-            f"Diagnostic Status: CONFIRMED {category_str} (Passed >={threshold_percent}.0% Gate)",
+            f"Model prediction: {category_str} (Passed >={threshold_percent}.0% Gate)",
             f"Diagnosis Code   : {predicted_code.upper()} - {meta.get('name', predicted_code)}",
             f"Certainty Metric : {confidence:.1%}",
             f"ICD-10 Code      : {meta.get('icd10', 'N/A')}",
@@ -640,18 +505,9 @@ if CHECKPOINT_PATH.stat().st_size < 1_000_000:
     )
     st.stop()
 
-try:
-    model, checkpoint, device = load_medfusionnet_model(str(CHECKPOINT_PATH))
-except Exception as error:
-    startup_view.empty()
-    st.error(f"Failed to load MedFusionNet checkpoint: {error}")
-    st.stop()
-
 startup_view.empty()
 st.session_state.workspace_ready = True
-
-classes = checkpoint["classes"]
-image_size = checkpoint["image_size"]
+st.caption("Research prototype. Model scores are not diagnostic certainty; clinical review is required.")
 
 # ==============================================================================
 # VIEW 1: PATIENT INTAKE & LESION ACQUISITION (PAGE 1 - ZERO SCROLL)
@@ -689,19 +545,33 @@ if st.session_state.current_page == "intake":
             if uploaded_file is None:
                 st.button("Analyze image", type="primary", use_container_width=True, key="btn_run_analysis", disabled=True)
             else:
-                active_image = Image.open(uploaded_file).convert("RGB")
                 image_source_label = uploaded_file.name
-
-                # Display-only copy: keep the original image untouched for inference.
-                preview_image = active_image.copy()
-                preview_image.thumbnail((1600, 1600))
-                preview_buffer = io.BytesIO()
-                preview_image.save(preview_buffer, format="PNG")
-                preview_base64 = base64.b64encode(preview_buffer.getvalue()).decode("ascii")
+                upload_digest = sha256(uploaded_file.getbuffer()).hexdigest()
+                if st.session_state.get("_upload_digest") != upload_digest:
+                    try:
+                        if uploaded_file.size > 10 * 1024 * 1024:
+                            raise ValueError("Please use an image smaller than 10 MB.")
+                        uploaded_file.seek(0)
+                        with Image.open(uploaded_file) as source:
+                            if source.width * source.height > 20_000_000:
+                                raise ValueError("Please use an image smaller than 20 megapixels.")
+                            active_image = ImageOps.exif_transpose(source).convert("RGB")
+                        preview_image = active_image.copy()
+                        preview_image.thumbnail((640, 640))
+                        preview_buffer = io.BytesIO()
+                        preview_image.save(preview_buffer, format="JPEG", quality=80)
+                        st.session_state._upload_image = active_image
+                        st.session_state._upload_preview = base64.b64encode(preview_buffer.getvalue()).decode("ascii")
+                        st.session_state._upload_digest = upload_digest
+                    except (OSError, ValueError, Image.DecompressionBombError) as error:
+                        st.error(f"Unable to read this image: {error}")
+                        st.stop()
+                active_image = st.session_state._upload_image
+                preview_base64 = st.session_state._upload_preview
                 st.html(
                     f"""<style>
                     .st-key-intake_upload [data-testid="stFileUploaderDropzone"] {{
-                        background-image: url("data:image/png;base64,{preview_base64}");
+                        background-image: url("data:image/jpeg;base64,{preview_base64}");
                         background-size: contain;
                         background-repeat: no-repeat;
                         background-position: center;
@@ -720,8 +590,10 @@ if st.session_state.current_page == "intake":
                 )
 
                 # Domain & Out-Of-Distribution Quality Gate
-                is_dermoscopy, ood_reason, ood_stats = validate_dermoscopy_domain(active_image)
                 if st.button("Analyze image", type="primary", use_container_width=True, key="btn_run_analysis"):
+                    for key in ("_cached_pdf", "_cached_txt", "_last_report_key"):
+                        st.session_state.pop(key, None)
+                    is_dermoscopy, ood_reason, ood_stats = validate_dermoscopy_domain(active_image)
                     if not is_dermoscopy:
                         # Rejected input gets a result status without running inference.
                         st.session_state.analysis_results = {
@@ -746,7 +618,15 @@ if st.session_state.current_page == "intake":
                         st.session_state.current_page = "results"
                         st.rerun()
 
-                    with st.spinner("Executing MedFusionNet Diagnostic Inference & Multi-Scale Layer-CAM..."):
+                    with st.spinner("Analyzing image (the first analysis also loads the model)..."):
+                        from inference import load_medfusionnet_model, predict_with_multiscale_gradcam
+                        try:
+                            model, checkpoint, device = load_medfusionnet_model(str(CHECKPOINT_PATH))
+                        except Exception as error:
+                            st.error(f"Unable to load the model: {error}")
+                            st.stop()
+                        classes = checkpoint["classes"]
+                        image_size = checkpoint["image_size"]
                         probabilities, cam, fusion_weights, predicted_index = predict_with_multiscale_gradcam(
                             model=model,
                             image=active_image,
@@ -768,6 +648,8 @@ if st.session_state.current_page == "intake":
                             "patient_name": patient_name_input,
                             "patient_age": patient_age_input,
                             "anatomic_site": anatomic_site_input,
+                            "classes": classes,
+                            "image_size": image_size,
                             "probabilities": probabilities,
                             "cam": cam,
                             "fusion_weights": fusion_weights,
@@ -787,6 +669,8 @@ if st.session_state.current_page == "intake":
 # ==============================================================================
 else:
     results = st.session_state.analysis_results
+    classes = results.get("classes", [])
+    image_size = results.get("image_size", 224)
     active_image = results["active_image"]
     image_source_label = results["image_source_label"]
     patient_id = results["patient_id"]
@@ -816,9 +700,9 @@ else:
         f"""
         <div class="sg-card" style="padding: 16px 24px; margin-bottom: 22px;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; font-size: 0.88rem; color: #52606D;">
-                <div><strong style="color: #65717B;">Patient:</strong> <span style="color: #253442; font-weight: 600;">{patient_name}</span> (ID: {patient_id}, Age: {patient_age})</div>
-                <div><strong style="color: #65717B;">Anatomic Site:</strong> <span style="color: #275D89; font-weight: 600;">{anatomic_site}</span></div>
-                <div><strong style="color: #65717B;">Source Scan:</strong> <span style="color: #253442; font-weight: 600;">{image_source_label}</span> ({active_image.width} &times; {active_image.height} px)</div>
+                <div><strong style="color: #65717B;">Patient:</strong> <span style="color: #253442; font-weight: 600;">{escape(patient_name)}</span> (ID: {escape(patient_id)}, Age: {escape(patient_age)})</div>
+                <div><strong style="color: #65717B;">Anatomic Site:</strong> <span style="color: #275D89; font-weight: 600;">{escape(anatomic_site)}</span></div>
+                <div><strong style="color: #65717B;">Source Scan:</strong> <span style="color: #253442; font-weight: 600;">{escape(image_source_label)}</span> ({active_image.width} &times; {active_image.height} px)</div>
                 <div><strong style="color: #65717B;">Clinical Gate:</strong> <span style="color: #275D89; font-weight: 700;">Fixed &ge; 90.0% Cutoff</span></div>
             </div>
         </div>
@@ -850,10 +734,10 @@ else:
             st.markdown(
                 f"""
                 <div class="sg-result-card sg-result-malignant">
-                    <span class="sg-result-badge sg-badge-red">{meta.get('category', 'Malignant Neoplasm').upper()} CONFIRMED (&ge; {threshold_percent}.0%)</span>
-                    <div class="sg-result-title">Confirmed Diagnosis: {meta.get('name', predicted_code)}</div>
+                    <span class="sg-result-badge sg-badge-red">{meta.get('category', 'Malignant Neoplasm').upper()} MODEL PREDICTION (&ge; {threshold_percent}.0%)</span>
+                    <div class="sg-result-title">Model prediction: {meta.get('name', predicted_code)}</div>
                     <div style="font-size: 1.02rem; line-height: 1.6; margin-top: 10px; color: #703D46;">
-                        <strong>Certainty Metric:</strong> <span style="font-size: 1.35rem; font-weight: 800; color: #A32E43;">{confidence:.1%}</span> (Exceeds {threshold_percent}.0% Safety Gate)<br>
+                        <strong>Model score:</strong> <span style="font-size: 1.35rem; font-weight: 800; color: #A32E43;">{confidence:.1%}</span> (Exceeds {threshold_percent}.0% Safety Gate)<br>
                         <strong>ICD-10 Code:</strong> {meta.get('icd10', 'N/A')} &nbsp;|&nbsp; <strong>Clinical Severity:</strong> {meta.get('severity', 'HIGH')}<br><br>
                         <strong>Pathological Characteristics:</strong> {meta.get('description', '')}<br><br>
                         <strong>Recommended Clinical Protocol:</strong> {meta.get('protocol', '')}
@@ -866,11 +750,11 @@ else:
             st.markdown(
                 f"""
                 <div class="sg-result-card sg-result-benign">
-                    <span class="sg-result-badge sg-badge-green">BENIGN LESION CONFIRMED (&ge; {threshold_percent}.0%)</span>
-                    <div class="sg-result-title">Confirmed Diagnosis: {meta.get('name', predicted_code)}</div>
+                    <span class="sg-result-badge sg-badge-green">BENIGN LESION MODEL PREDICTION (&ge; {threshold_percent}.0%)</span>
+                    <div class="sg-result-title">Model prediction: {meta.get('name', predicted_code)}</div>
                     <div style="font-size: 1.02rem; line-height: 1.6; margin-top: 10px; color: #315D4D;">
-                        <strong>Certainty Metric:</strong> <span style="font-size: 1.35rem; font-weight: 800; color: #246B53;">{confidence:.1%}</span> (Exceeds {threshold_percent}.0% Safety Gate)<br>
-                        <strong>ICD-10 Code:</strong> {meta.get('icd10', 'N/A')} &nbsp;|&nbsp; <strong>Clinical Status:</strong> Harmless / Non-Malignant<br><br>
+                        <strong>Model score:</strong> <span style="font-size: 1.35rem; font-weight: 800; color: #246B53;">{confidence:.1%}</span> (Exceeds {threshold_percent}.0% Safety Gate)<br>
+                        <strong>ICD-10 Code:</strong> {meta.get('icd10', 'N/A')} &nbsp;|&nbsp; <strong>Clinical Status:</strong> Predicted benign class; clinical review required<br><br>
                         <strong>Pathological Characteristics:</strong> {meta.get('description', '')}<br><br>
                         <strong>Clinical Recommendation:</strong> {meta.get('protocol', '')}
                     </div>
@@ -886,51 +770,68 @@ else:
         resized_display = active_image.resize((image_size, image_size))
         image_array = np.asarray(resized_display, dtype=np.float32) / 255.0
 
-        col_hdr_left, col_hdr_right = st.columns([3.2, 1.3])
-        with col_hdr_left:
-            st.markdown(
-                """
-                <div class="sg-card" style="margin-bottom: 0px; padding-bottom: 14px;">
-                    <div class="sg-card-title">Image attribution</div>
-                    <div class="sg-card-caption" style="margin-bottom: 0px;">
-                        High-precision element-wise gradient attribution combining Stage 5 (fine boundaries & reticular pigment mesh) and Stage 7 (macro-lesion context). Eliminates gradient cancellation artifacts and delineates exact pathological margins.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with col_hdr_right:
-            selected_cmap = st.selectbox(
-                "Heatmap Palette",
-                ["turbo (High Precision)", "jet (Classic)", "magma (Thermal)"],
-                index=0,
-                key="results_cmap_palette",
-            )
-            cmap_name = selected_cmap.split()[0].lower()
-
-        heatmap_colored = plt.get_cmap(cmap_name)(cam)[..., :3]
-        alpha_mask = np.expand_dims(cam * 0.65, axis=-1)
-        overlay_display = np.clip((1.0 - alpha_mask) * image_array + alpha_mask * heatmap_colored, 0.0, 1.0)
-
-        if not is_confident:
-            st.markdown(
-                """
-                <div style="background: rgba(217, 119, 6, 0.12); border: 1px solid #D97706; border-radius: 12px; padding: 12px 18px; color: #70511E; font-size: 0.88rem; line-height: 1.5; margin: 12px 0 16px 0;">
-                    <strong>Exploratory Saliency Active (Borderline Case &lt; 90.0%):</strong> While automated confirmation requires &ge;90.0% certainty, the high-resolution Multi-Scale Layer-CAM below highlights the atypical textural margins and pigment network that drew neural attention to assist with biopsy planning.
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+        cam = results["cam"]
+        cmap_name = "turbo"
+        overlay_display = image_array
+        if cam is None:
+            st.image(resized_display, caption="Dermoscopy image", width=300)
+            st.caption("Image attribution is optional and takes additional processing time.")
+            if st.button("Generate image attribution", key="generate_heatmap"):
+                from inference import load_medfusionnet_model, predict_with_multiscale_gradcam
+                with st.spinner("Generating image attribution..."):
+                    model, _, device = load_medfusionnet_model(str(CHECKPOINT_PATH))
+                    _, results["cam"], _, _ = predict_with_multiscale_gradcam(
+                        model, active_image, image_size, device, include_heatmap=True,
+                        confidence_threshold=threshold,
+                    )
+                st.rerun()
         else:
-            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+            from matplotlib import colormaps
+            col_hdr_left, col_hdr_right = st.columns([3.2, 1.3])
+            with col_hdr_left:
+                st.markdown(
+                    """
+                    <div class="sg-card" style="margin-bottom: 0px; padding-bottom: 14px;">
+                        <div class="sg-card-title">Image attribution</div>
+                        <div class="sg-card-caption" style="margin-bottom: 0px;">
+                            High-precision element-wise gradient attribution combining Stage 5 (fine boundaries & reticular pigment mesh) and Stage 7 (macro-lesion context). Shows model attribution; this is not a lesion boundary or a diagnostic confirmation.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with col_hdr_right:
+                selected_cmap = st.selectbox(
+                    "Heatmap Palette",
+                    ["turbo (High Precision)", "jet (Classic)", "magma (Thermal)"],
+                    index=0,
+                    key="results_cmap_palette",
+                )
+                cmap_name = selected_cmap.split()[0].lower()
 
-        col_xai_1, col_xai_2, col_xai_3 = st.columns(3)
-        with col_xai_1:
-            st.image(resized_display, caption="1. Normalized Dermoscopy View", width="stretch")
-        with col_xai_2:
-            st.image(heatmap_colored, caption=f"2. Multi-Scale Layer-CAM Saliency ({cmap_name.upper()})", width="stretch")
-        with col_xai_3:
-            st.image(overlay_display, caption="3. Pathological Heatmap Overlay", width="stretch")
+            heatmap_colored = colormaps[cmap_name](cam)[..., :3]
+            alpha_mask = np.expand_dims(cam * 0.65, axis=-1)
+            overlay_display = np.clip((1.0 - alpha_mask) * image_array + alpha_mask * heatmap_colored, 0.0, 1.0)
+
+            if not is_confident:
+                st.markdown(
+                    """
+                    <div style="background: rgba(217, 119, 6, 0.12); border: 1px solid #D97706; border-radius: 12px; padding: 12px 18px; color: #70511E; font-size: 0.88rem; line-height: 1.5; margin: 12px 0 16px 0;">
+                        <strong>Exploratory Saliency Active (Borderline Case &lt; 90.0%):</strong> While automated confirmation requires &ge;90.0% certainty, the high-resolution Multi-Scale Layer-CAM below highlights the atypical textural margins and pigment network that drew neural attention to assist with biopsy planning.
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+
+            col_xai_1, col_xai_2, col_xai_3 = st.columns(3)
+            with col_xai_1:
+                st.image(resized_display, caption="1. Normalized Dermoscopy View", width="stretch")
+            with col_xai_2:
+                st.image(heatmap_colored, caption=f"2. Multi-Scale Layer-CAM Saliency ({cmap_name.upper()})", width="stretch")
+            with col_xai_3:
+                st.image(overlay_display, caption="3. Pathological Heatmap Overlay", width="stretch")
 
         # ==============================================================================
         # 10. Differential Diagnosis: 7-Class Probability Distribution
@@ -1014,8 +915,9 @@ else:
         filename_txt = f"SkinGuardAI_Report_{clean_pid}_{report_timestamp}.txt"
 
         # Cache report payloads in session_state to eliminate CPU stalls on UI interactions
-        cache_key = f"{patient_id}_{image_source_label}_{clinical_notes_input}_{cmap_name}"
-        if st.session_state.get("_last_report_key") != cache_key or "_cached_pdf" not in st.session_state:
+        cache_key = (patient_id, patient_name, patient_age, anatomic_site, clinical_notes_input, cmap_name, cam is not None)
+        if st.button("Prepare reports", key="prepare_reports"):
+            st.session_state.pop("_cached_pdf", None)
             pdf_bytes = generate_clinical_pdf_report(
                 patient_id=patient_id,
                 patient_name=patient_name,
@@ -1054,31 +956,33 @@ else:
             st.session_state._cached_pdf = pdf_bytes
             st.session_state._cached_txt = txt_report
             st.session_state._last_report_key = cache_key
-        else:
+        if st.session_state.get("_last_report_key") == cache_key and "_cached_pdf" in st.session_state:
             pdf_bytes = st.session_state._cached_pdf
             txt_report = st.session_state._cached_txt
 
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            st.download_button(
-                label="Download PDF report",
-                data=pdf_bytes,
-                file_name=filename_pdf,
-                mime="application/pdf",
-                type="primary",
-                use_container_width=True,
-                key="btn_dl_pdf",
-            )
-        with col_btn2:
-            st.download_button(
-                label="Download text summary",
-                data=txt_report,
-                file_name=filename_txt,
-                mime="text/plain",
-                type="secondary",
-                use_container_width=True,
-                key="btn_dl_txt",
-            )
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                st.download_button(
+                    label="Download PDF report",
+                    data=pdf_bytes,
+                    file_name=filename_pdf,
+                    on_click="ignore",
+                    mime="application/pdf",
+                    type="primary",
+                    use_container_width=True,
+                    key="btn_dl_pdf",
+                )
+            with col_btn2:
+                st.download_button(
+                    label="Download text summary",
+                    data=txt_report,
+                    file_name=filename_txt,
+                    on_click="ignore",
+                    mime="text/plain",
+                    type="secondary",
+                    use_container_width=True,
+                    key="btn_dl_txt",
+                )
 
     # Bottom navigation to return to intake
     st.markdown("<div style='height: 24px;'></div>", unsafe_allow_html=True)
@@ -1086,15 +990,3 @@ else:
         st.session_state.current_page = "intake"
         st.session_state.analysis_results = None
         st.rerun()
-
-
-
-if __name__ == "__main__":
-    import sys
-    try:
-        from streamlit.web import cli as stcli
-        sys.argv = ["streamlit", "run", __file__, "--server.port", "8501", "--server.headless", "true"]
-        sys.exit(stcli.main())
-    except Exception:
-        pass
-

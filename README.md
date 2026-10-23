@@ -2,6 +2,8 @@
 
 SkinGuardAI is an end-to-end clinical deep learning system for dermoscopic skin lesion screening and decision support, built on the **HAM10000** dataset.
 
+See [deployment and performance guide](DEPLOYMENT.md) for Streamlit updates, Render setup, and validation commands.
+
 ---
 
 ## 🔬 System Architecture
