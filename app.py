@@ -591,7 +591,7 @@ if st.session_state.current_page == "intake":
 
                 # Domain & Out-Of-Distribution Quality Gate
                 if st.button("Analyze image", type="primary", use_container_width=True, key="btn_run_analysis"):
-                    for key in ("_cached_pdf", "_cached_txt", "_last_report_key"):
+                    for key in ("_cached_pdf", "_cached_txt", "_last_report_key", "results_clinical_notes"):
                         st.session_state.pop(key, None)
                     is_dermoscopy, ood_reason, ood_stats = validate_dermoscopy_domain(active_image)
                     if not is_dermoscopy:
